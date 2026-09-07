@@ -1,0 +1,103 @@
+# ============================================================
+# Self-Learning Coding Agent — .gitignore
+# ============================================================
+
+# ------------------------------------------------------------
+# Irrelevant / Non-Core Project Files
+# ------------------------------------------------------------
+
+# Demo & learning scripts (not part of core agent)
+demo_learning.py
+demo_test.py
+
+# One-off data loader script
+load_humaneval.py
+
+# Benchmark / evaluation datasets (large, auto-generated)
+eval_data.jsonl
+selected_problems.jsonl
+
+# Benchmark submodule (cloned repo, not needed for core agent)
+human-eval/
+
+# Architecture draft / scratch file
+workflow
+
+# Empty test directory
+tests/
+
+# ------------------------------------------------------------
+# Secrets & Environment
+# ------------------------------------------------------------
+.env
+
+# Keep the example config
+!.env.example
+
+# ------------------------------------------------------------
+# Python
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+.eggs/
+
+# ------------------------------------------------------------
+# Virtual Environment
+# ------------------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# ------------------------------------------------------------
+# Testing & Coverage
+# ------------------------------------------------------------
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.coveragerc
+pytest.ini
+
+# ------------------------------------------------------------
+# IDE & Editor
+# ------------------------------------------------------------
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.DS_Store
+Thumbs.db
+
+# ------------------------------------------------------------
+# Logs & Runtime Output
+# ------------------------------------------------------------
+*.log
+*.jsonl.bak
+*.tmp
+
+# ------------------------------------------------------------
+# OS
+# ------------------------------------------------------------
+.DS_Store
+desktop.ini
+ehthumbs.db

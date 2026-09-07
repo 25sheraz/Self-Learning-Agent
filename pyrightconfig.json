@@ -1,0 +1,12 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": [
+    "agent",
+    "tests"
+  ],
+  "exclude": [
+    "human-eval",
+    "**/__pycache__"
+  ]
+}

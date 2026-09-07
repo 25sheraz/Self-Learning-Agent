@@ -1,0 +1,29 @@
+[
+  {
+    "id": "06856f24",
+    "task_id": "is_nested",
+    "task_tag": "is_nested",
+    "error_type": "SyntaxError",
+    "failed_pattern": "SyntaxError: unmatched ']'",
+    "fix_pattern": "Applied targeted correction to resolve error.",
+    "lesson": "When implementing solutions inside a code block, ensure the content is valid executable Python code rather than explanatory prose or pseudocode, because stray text and unmatched bracket characters will be parsed as Python and raise a SyntaxError.",
+    "reflection": "When implementing solutions inside a code block, ensure the content is valid executable Python code rather than explanatory prose or pseudocode, because stray text and unmatched bracket characters will be parsed as Python and raise a SyntaxError.",
+    "keywords": [
+      "brackets",
+      "contains",
+      "create",
+      "function",
+      "input",
+      "is_nested",
+      "only",
+      "square",
+      "string",
+      "syntaxerror",
+      "takes",
+      "which"
+    ],
+    "timestamp": "2026-09-07T07:19:15.836980+00:00",
+    "success_after_fix": true,
+    "usage_count": 0
+  }
+]
