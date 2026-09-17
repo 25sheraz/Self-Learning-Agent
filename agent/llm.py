@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Any, Iterable
 import logging
 import time
 import re
-from openai import OpenAI, APIError, AuthenticationError, RateLimitError
+from openai import OpenAI, APIError, APITimeoutError, AuthenticationError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
 
 from .config import AgentConfig, get_config
@@ -30,6 +30,7 @@ class LLMClient:
             self._client = OpenAI(
                 api_key=self.config.api_key,
                 base_url=self.config.base_url,
+                timeout=120.0,  # 2-minute hard timeout — prevents indefinite hang
             )
         else:
             logger.warning(
@@ -90,12 +91,22 @@ class LLMClient:
                     messages=messages,
                     temperature=temp,
                     max_tokens=tokens,
+                    timeout=120.0,  # 2-minute per-request timeout
                 )
                 choice = response.choices[0]
                 content = choice.message.content or ""
 
                 if getattr(choice, "finish_reason", None) == "length":
-                    logger.warning("Kimi response was truncated due to max_tokens limit.")
+                    logger.warning(
+                        "Kimi response was truncated due to max_tokens limit. "
+                        f"Partial content length: {len(content)} chars. "
+                        "Consider raising MAX_TOKENS in your .env file."
+                    )
+                    # Auto-close an unclosed markdown code fence so _extract_clean_code
+                    # can recover the partial code block instead of returning empty.
+                    if re.search(r"```(?:python[0-9]?|py)?\s*\n", content, re.IGNORECASE) and not content.rstrip().endswith("```"):
+                        content = content.rstrip() + "\n```"
+                        logger.warning("Auto-closed truncated code fence in Kimi response.")
 
                 # Fallback: if content is empty but reasoning_content contains code
                 if not content.strip() and hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
@@ -109,6 +120,13 @@ class LLMClient:
                         return f"```python\n{longest}\n```"
 
                 return content or ""
+
+            except APITimeoutError:
+                if attempt_idx < 3:
+                    logger.warning(f"Kimi API timed out (attempt {attempt_idx + 1}/4). Retrying...")
+                    time.sleep(2.0)
+                    continue
+                raise RuntimeError("Kimi API timed out after 120s on all 4 attempts.")
 
             except AuthenticationError as e:
                 logger.error("Authentication failed: Check your KIMI_API_KEY in .env.")

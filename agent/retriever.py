@@ -213,12 +213,22 @@ class ContextRetriever:
         sections: List[str] = []
 
         # 1. Goal and Function Contract
-        args_repr = ", ".join([f"{a['name']}: {a['type']}" for a in task_spec.arguments])
-        ret_repr = f" -> {task_spec.return_type}" if task_spec.return_type else ""
-        signature_line = f"def {task_spec.entry_point}({args_repr}){ret_repr}:"
-
         sections.append(f"### Goal\n{task_spec.goal_summary or 'Implement the requested function.'}")
-        sections.append(f"### Target Function Signature\n```python\n{signature_line}\n```")
+
+        # Bug Fix 3: Only emit an explicit signature when we have *known* argument info.
+        # For vague prompts (empty arguments, no `def` in raw text), skipping the signature
+        # prevents the coding LLM from being locked into a wrong zero-argument stub
+        # (e.g. `def completely():` with 0 args when the real function needs multiple params).
+        has_known_signature = (
+            bool(task_spec.arguments)
+            or bool(task_spec.return_type)
+            or "def " in task_spec.raw_prompt
+        )
+        if has_known_signature:
+            args_repr = ", ".join([f"{a['name']}: {a['type']}" for a in task_spec.arguments])
+            ret_repr = f" -> {task_spec.return_type}" if task_spec.return_type else ""
+            signature_line = f"def {task_spec.entry_point}({args_repr}){ret_repr}:"
+            sections.append(f"### Target Function Signature\n```python\n{signature_line}\n```")
 
         # 2. Docstring & Instructions
         if task_spec.docstring:

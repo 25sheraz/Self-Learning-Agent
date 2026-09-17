@@ -13,6 +13,7 @@ Coordinates the end-to-end autonomous coding lifecycle:
 from __future__ import annotations
 
 import time
+import re
 import logging
 from enum import Enum
 from dataclasses import dataclass, field
@@ -178,6 +179,14 @@ class Orchestrator:
             "entry_point": entry_point,
         })
 
+        # 0.5 Bug Fix 4 — Prompt Enrichment:
+        # Vague/short prompts (no `def`, no docstring, < 15 words) produce ambiguous
+        # TaskSpecifications with empty argument lists, causing wrong signatures to be
+        # baked into both the test-generation and code-generation prompts.
+        # Expand the prompt into a full spec BEFORE task understanding so every downstream
+        # stage has concrete type/signature/example information to work with.
+        prompt = self._enrich_vague_prompt(prompt=prompt, on_emit=_emit)
+
         # 1. Task Understanding
         _emit(StepStatus.UNDERSTANDING, "Analyzing prompt and extracting task specification...", {
             "prompt_length": len(prompt),
@@ -316,6 +325,83 @@ class Orchestrator:
             error_message=error_message,
             explanation=f"Solved `{target_entry_point}` in {coding_result.total_attempts} attempt(s)." if coding_result.success else None,
         )
+
+    def _enrich_vague_prompt(
+        self,
+        prompt: str,
+        on_emit: Optional[Callable] = None,
+    ) -> str:
+        """
+        Bug Fix 4 — Prompt Enrichment.
+
+        Detects vague or short prompts (fewer than 15 words, no `def`, no docstring markers)
+        and calls the LLM to expand them into a complete Python function specification with:
+          - A properly typed function signature
+          - A clear docstring
+          - At least 3 doctest examples (>>> call / expected output)
+
+        This prevents `TaskUnderstanding` from producing an empty-argument `TaskSpecification`,
+        which causes the retriever to emit a wrong zero-arg signature and the coding LLM to
+        generate an incompatible function stub that fails all test assertions.
+        """
+        word_count = len(prompt.strip().split())
+        has_def = "def " in prompt
+        has_docstring = '"""' in prompt or "'''" in prompt or ">>>" in prompt
+
+        # Rich prompt — no enrichment needed
+        if word_count > 20 or has_def or has_docstring:
+            return prompt
+
+        if on_emit:
+            on_emit(
+                StepStatus.UNDERSTANDING,
+                f"⚠️  Prompt is very short ({word_count} word(s)). "
+                "Enriching into a full Python function specification via LLM...",
+            )
+
+        try:
+            system_prompt = (
+                "You are a Python specification writer. "
+                "Given a brief function name or description, produce a complete Python function stub "
+                "with: a properly typed signature, a detailed docstring, and at least 3 >>> doctest "
+                "examples showing input → output. "
+                "Return ONLY the stub (body = `pass`) inside a ```python ... ``` code block. "
+                "Do NOT implement the body."
+            )
+            user_prompt = (
+                f"Write a complete Python function specification for: {prompt.strip()}\n\n"
+                "Include:\n"
+                "- Typed parameters (use Python type hints)\n"
+                "- Return type annotation\n"
+                "- Clear docstring explaining what the function does\n"
+                "- At least 3 doctest examples with expected output\n"
+                "- `pass` as the function body\n"
+            )
+            response = self.llm_client.generate(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                temperature=self.config.temperature,
+            )
+            pattern = r"```(?:python[0-9]?|py)?\s*\n?(.*?)\s*```"
+            matches = re.findall(pattern, response, re.DOTALL | re.IGNORECASE)
+            valid: list[str] = [m.strip() for m in matches if m.strip()]
+            if valid:
+                enriched = max(valid, key=len)
+                logger.info(
+                    f"Prompt enriched: '{prompt.strip()[:50]}' "
+                    f"→ {len(enriched)}-char spec with signature and examples."
+                )
+                if on_emit:
+                    on_emit(
+                        StepStatus.UNDERSTANDING,
+                        f"✅ Prompt expanded into full function spec ({len(enriched)} chars). "
+                        "Proceeding with enriched specification.",
+                    )
+                return enriched
+        except Exception as exc:
+            logger.warning(f"Prompt enrichment failed: {exc}. Using original prompt.")
+
+        return prompt
 
     def run_task(
         self,

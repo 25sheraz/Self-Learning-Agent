@@ -120,6 +120,7 @@ class CodingAgent:
         context: RetrievedContext,
         eval_result: EvaluationResult,
         attempt: int,
+        test_code: Optional[str] = None,
     ) -> str:
         """
         Generates a targeted bug fix or patch based on sandbox execution feedback.
@@ -145,6 +146,10 @@ class CodingAgent:
                 f"❌ ASSERTION FAILED: The code failed a test case.\n"
                 f"Error details: {eval_result.error_message}"
             )
+            # Bug Fix 1: Always include full stderr so LLM sees the actual failed values,
+            # not just the bare exception name.
+            if eval_result.stderr and eval_result.stderr.strip():
+                diagnostic_lines.append(f"Full traceback (shows actual vs expected values):\n{eval_result.stderr.strip()}")
         elif eval_result.stderr:
             diagnostic_lines.append(
                 f"❌ RUNTIME EXCEPTION:\n{eval_result.stderr.strip()}"
@@ -165,6 +170,17 @@ class CodingAgent:
             f"```python\n{code}\n```\n\n"
             f"### Failure Diagnostics\n"
             f"{diagnostics_text}\n\n"
+        )
+
+        # Bug Fix 2: Show the LLM exactly which test assertions it must satisfy.
+        # Without this, the LLM has no anchor and guesses blindly across retries.
+        if test_code and test_code.strip():
+            user_prompt += (
+                f"### Test Suite That Must Pass\n"
+                f"```python\n{test_code.strip()}\n```\n\n"
+            )
+
+        user_prompt += (
             f"Please carefully analyze why the previous code failed. "
             f"Fix the bug, handle edge cases, and output the complete corrected Python code."
         )
@@ -192,6 +208,10 @@ class CodingAgent:
         """
         budget = max_retries if max_retries is not None else self.config.max_retries
         target_entry_point = entry_point or context.task_spec.entry_point
+
+        # Bug Fix 5: Track whether tests are auto-generated so we can recover if they
+        # used the wrong signature assumption after a TypeError on attempt 1.
+        _tests_auto_generated = not test_code or not test_code.strip()
 
         # Ensure test suite is consistent across all retries if not provided
         if not test_code or not test_code.strip():
@@ -244,6 +264,29 @@ class CodingAgent:
                 final_eval_result=eval_result,
             )
 
+        # Bug Fix 5: If attempt 1 produced a TypeError AND the tests were auto-generated,
+        # the test generator made wrong signature assumptions (e.g. 0-arg vs 3-arg).
+        # Regenerate tests using the actual generated code's signature as context so that
+        # the frozen test suite is consistent with what the self-correction loop will fix.
+        if (
+            _tests_auto_generated
+            and eval_result.error_message
+            and "typeerror" in eval_result.error_message.lower()
+        ):
+            try:
+                regen_prompt = (
+                    f"{context.task_spec.raw_prompt}\n\n"
+                    f"The function signature discovered from the generated code:\n"
+                    f"```python\n{current_code[:600]}\n```"
+                )
+                test_code = self.evaluator.generate_tests(
+                    prompt=regen_prompt,
+                    entry_point=target_entry_point,
+                )
+                logger.info("Regenerated test suite after TypeError on attempt 1 to fix signature mismatch.")
+            except Exception as exc:
+                logger.warning(f"Test regeneration after TypeError failed: {exc}")
+
         # Self-correction loop for subsequent attempts
         for attempt_num in range(2, budget + 2):
             logger.warning(
@@ -256,6 +299,7 @@ class CodingAgent:
                 context=context,
                 eval_result=eval_result,
                 attempt=attempt_num,
+                test_code=test_code,  # Bug Fix 2: pass test suite to repair prompt
             )
             if new_code and new_code.strip():
                 current_code = new_code

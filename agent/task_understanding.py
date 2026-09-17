@@ -315,12 +315,18 @@ class TaskUnderstanding:
         Uses heuristics to find a target function name from natural language.
         """
         # First priority: check for explicit identifiers in backticks: `name`
+        # Words that look like identifiers but are actually common English words
+        _COMMON_WORDS = frozenset({
+            "python", "function", "the", "a", "an", "given", "code",
+            "def", "method", "class", "true", "false", "none", "str", "int",
+            "list", "dict", "completely", "correctly", "properly", "fully",
+            "according", "above", "below", "following", "specified", "target",
+            "implement", "implementation", "return", "returns", "only",
+            "executable", "complete", "specification", "contract",
+        })
         backtick_matches = re.findall(r"[`']([a-zA-Z_]\w*)[`']", text)
         for candidate in backtick_matches:
-            if candidate.lower() not in (
-                "python", "function", "the", "a", "an", "given", "code",
-                "def", "method", "class", "true", "false", "none", "str", "int", "list", "dict"
-            ):
+            if candidate.lower() not in _COMMON_WORDS:
                 return candidate
 
         # Second priority: look for phrases like function (called|named)? <name>
@@ -334,7 +340,11 @@ class TaskUnderstanding:
                 candidate = match.group(1)
                 if candidate.lower() not in (
                     "python", "function", "the", "a", "an", "given", "code",
-                    "called", "named", "to", "that", "for"
+                    "called", "named", "to", "that", "for",
+                    "completely", "correctly", "properly", "fully", "according",
+                    "above", "below", "following", "specified", "target",
+                    "implement", "implementation", "return", "returns", "only",
+                    "executable", "complete", "specification", "contract",
                 ):
                     return candidate
         return "solve"
