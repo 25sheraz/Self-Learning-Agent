@@ -2,6 +2,8 @@
 
 <h1>🤖 Self-Learning Coding Agent</h1>
 
+<p><img src="docs/cover.jpg" alt="Self-Learning Coding Agent: HumanEval pass@1 rises from 62% to 74% with persistent memory" width="100%"></p>
+
 <p>
   <strong>An autonomous AI coding agent that generates, evaluates, and self-corrects Python code — and <em>gets smarter with every mistake.</em></strong>
 </p>
